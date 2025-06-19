@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CoreModule } from './core/core.module';
 import { SharedModule } from './shared/shared.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -30,8 +34,20 @@ import { SharedModule } from './shared/shared.module';
       : []),
     CoreModule,
     SharedModule,
+    AuthModule,
+    UsersModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    ...(process.env.SKIP_DB_CONNECTION !== 'true'
+      ? [
+          {
+            provide: APP_GUARD,
+            useClass: JwtAuthGuard,
+          },
+        ]
+      : []),
+  ],
 })
 export class AppModule {}
