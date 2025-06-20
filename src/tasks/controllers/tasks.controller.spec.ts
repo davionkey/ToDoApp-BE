@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TasksController } from './tasks.controller';
 import { TasksService } from '../services/tasks.service';
-import { MockTasksService } from '../services/tasks.service.mock';
+import { TasksServiceMock } from '../services/tasks.service.mock';
 import { TaskStatus, TaskPriority } from '../entities/task.entity';
 
 describe('TasksController', () => {
@@ -14,7 +14,7 @@ describe('TasksController', () => {
       providers: [
         {
           provide: TasksService,
-          useClass: MockTasksService,
+          useClass: TasksServiceMock,
         },
       ],
     }).compile();
@@ -55,9 +55,12 @@ describe('TasksController', () => {
         description: 'Test Description',
         status: TaskStatus.PENDING,
         priority: TaskPriority.HIGH,
-        dueDate: undefined,
+        dueDate: null,
         isCompleted: false,
         userId: 'test-user-id',
+        categoryId: undefined,
+        category: undefined,
+        notes: [],
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       });
