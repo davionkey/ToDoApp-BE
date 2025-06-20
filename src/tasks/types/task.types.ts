@@ -1,4 +1,11 @@
 import { Task, TaskStatus, TaskPriority } from '../entities/task.entity';
+import { Category } from '../../categories/entities/category.entity';
+
+export interface TaskNote {
+  id: string;
+  content: string;
+  createdAt: Date;
+}
 
 export interface TaskResponse {
   id: string;
@@ -9,6 +16,9 @@ export interface TaskResponse {
   dueDate?: Date | null;
   isCompleted: boolean;
   userId: string;
+  categoryId?: string;
+  category?: Category;
+  notes: TaskNote[];
   createdAt: Date;
   updatedAt: Date;
 }

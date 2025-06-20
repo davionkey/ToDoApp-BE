@@ -5,6 +5,7 @@ import {
   IsNumber,
   Min,
   Max,
+  IsUUID,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
@@ -60,4 +61,12 @@ export class TaskQueryDto {
   @Max(100)
   @IsOptional()
   limit?: number = 10;
+
+  @ApiPropertyOptional({
+    description: 'Filter by category ID',
+    example: '550e8400-e29b-41d4-a716-446655440001',
+  })
+  @IsUUID()
+  @IsOptional()
+  categoryId?: string;
 }

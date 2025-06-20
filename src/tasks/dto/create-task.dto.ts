@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsDateString,
   MaxLength,
+  IsUUID,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TaskPriority } from '../entities/task.entity';
@@ -48,4 +49,12 @@ export class CreateTaskDto {
   @IsDateString()
   @IsOptional()
   dueDate?: string;
+
+  @ApiPropertyOptional({
+    description: 'Category ID to assign to the task',
+    example: '550e8400-e29b-41d4-a716-446655440001',
+  })
+  @IsUUID()
+  @IsOptional()
+  categoryId?: string;
 }

@@ -24,6 +24,11 @@ import { CreateTaskDto } from '../dto/create-task.dto';
 import { UpdateTaskDto } from '../dto/update-task.dto';
 import { TaskQueryDto } from '../dto/task-query.dto';
 import {
+  BulkUpdateTasksDto,
+  BulkDeleteTasksDto,
+} from '../dto/bulk-update-tasks.dto';
+import { AddTaskNoteDto } from '../dto/task-notes.dto';
+import {
   TaskResponse,
   TaskListResponse,
   TaskStatsResponse,
@@ -195,5 +200,69 @@ export class TasksController {
     @CurrentUser() user: UserResponse,
   ): Promise<void> {
     return this.tasksService.deleteTask(id, user.id);
+  }
+
+  @ApiOperation({ summary: 'Bulk update multiple tasks' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Tasks updated successfully',
+  })
+  @Put('bulk/update')
+  async bulkUpdateTasks(
+    @Body() bulkUpdateDto: BulkUpdateTasksDto,
+    @CurrentUser() user: UserResponse,
+  ): Promise<{ updated: number; failed: string[] }> {
+    return this.tasksService.bulkUpdateTasks(bulkUpdateDto, user.id);
+  }
+
+  @ApiOperation({ summary: 'Bulk delete multiple tasks' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Tasks deleted successfully',
+  })
+  @Delete('bulk/delete')
+  async bulkDeleteTasks(
+    @Body() bulkDeleteDto: BulkDeleteTasksDto,
+    @CurrentUser() user: UserResponse,
+  ): Promise<{ deleted: number; failed: string[] }> {
+    return this.tasksService.bulkDeleteTasks(bulkDeleteDto, user.id);
+  }
+
+  @ApiOperation({ summary: 'Add a note to a task' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Note added successfully',
+    type: 'TaskResponse',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Task not found',
+  })
+  @Post(':id/notes')
+  async addTaskNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() addNoteDto: AddTaskNoteDto,
+    @CurrentUser() user: UserResponse,
+  ): Promise<TaskResponse> {
+    return this.tasksService.addTaskNote(id, addNoteDto, user.id);
+  }
+
+  @ApiOperation({ summary: 'Remove a note from a task' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Note removed successfully',
+    type: 'TaskResponse',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Task or note not found',
+  })
+  @Delete(':id/notes/:noteId')
+  async removeTaskNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('noteId') noteId: string,
+    @CurrentUser() user: UserResponse,
+  ): Promise<TaskResponse> {
+    return this.tasksService.removeTaskNote(id, noteId, user.id);
   }
 }
