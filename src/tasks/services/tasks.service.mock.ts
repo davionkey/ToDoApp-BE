@@ -1,74 +1,95 @@
-import { Injectable } from '@nestjs/common';
-import { TasksService } from './tasks.service';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { Task, TaskStatus, TaskPriority } from '../entities/task.entity';
 import { CreateTaskDto } from '../dto/create-task.dto';
 import { UpdateTaskDto } from '../dto/update-task.dto';
 import { TaskQueryDto } from '../dto/task-query.dto';
+import {
+  BulkUpdateTasksDto,
+  BulkDeleteTasksDto,
+} from '../dto/bulk-update-tasks.dto';
+import { AddTaskNoteDto } from '../dto/task-notes.dto';
 import {
   TaskResponse,
   TaskListResponse,
   TaskStatsResponse,
 } from '../types/task.types';
-import { TaskStatus, TaskPriority } from '../entities/task.entity';
 
 @Injectable()
-export class MockTasksService extends TasksService {
+export class TasksServiceMock {
   private mockTasks: TaskResponse[] = [
     {
-      id: '550e8400-e29b-41d4-a716-446655440001',
-      title: 'Sample Task 1',
-      description: 'This is a sample task for demonstration',
-      status: TaskStatus.PENDING,
-      priority: TaskPriority.MEDIUM,
-      dueDate: new Date('2024-12-31'),
-      isCompleted: false,
-      userId: 'mock-user-id',
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01'),
-    },
-    {
-      id: '550e8400-e29b-41d4-a716-446655440002',
-      title: 'Sample Task 2',
-      description: 'Another sample task',
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      title: 'Complete project documentation',
+      description: 'Write comprehensive documentation for the API',
       status: TaskStatus.IN_PROGRESS,
       priority: TaskPriority.HIGH,
-      dueDate: undefined,
+      dueDate: new Date('2024-12-31'),
       isCompleted: false,
-      userId: 'mock-user-id',
+      userId: 'user-1',
+      categoryId: '550e8400-e29b-41d4-a716-446655440001',
+      category: undefined,
+      notes: [
+        {
+          id: 'note-1',
+          content: 'Started working on API documentation',
+          createdAt: new Date('2024-01-01'),
+        },
+      ],
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-15'),
+    },
+    {
+      id: '550e8400-e29b-41d4-a716-446655440001',
+      title: 'Review code changes',
+      description: 'Review pull request #123',
+      status: TaskStatus.PENDING,
+      priority: TaskPriority.MEDIUM,
+      dueDate: new Date('2024-12-25'),
+      isCompleted: false,
+      userId: 'user-1',
+      categoryId: '550e8400-e29b-41d4-a716-446655440001',
+      category: undefined,
+      notes: [],
       createdAt: new Date('2024-01-02'),
       updatedAt: new Date('2024-01-02'),
     },
     {
-      id: '550e8400-e29b-41d4-a716-446655440003',
-      title: 'Completed Task',
-      description: 'This task is already completed',
+      id: '550e8400-e29b-41d4-a716-446655440002',
+      title: 'Set up deployment pipeline',
+      description: 'Configure CI/CD for the project',
       status: TaskStatus.COMPLETED,
       priority: TaskPriority.LOW,
-      dueDate: new Date('2024-01-15'),
+      dueDate: null,
       isCompleted: true,
-      userId: 'mock-user-id',
+      userId: 'user-1',
+      categoryId: undefined,
+      category: undefined,
+      notes: [],
       createdAt: new Date('2024-01-03'),
-      updatedAt: new Date('2024-01-03'),
+      updatedAt: new Date('2024-01-10'),
     },
   ];
 
-  /**
-   * Mock implementation of createTask
-   */
   async createTask(
     createTaskDto: CreateTaskDto,
     userId: string,
   ): Promise<TaskResponse> {
     const newTask: TaskResponse = {
-      id: `mock-task-${Date.now()}`,
+      id: `550e8400-e29b-41d4-a716-${Date.now()}`,
       title: createTaskDto.title,
       description: createTaskDto.description,
       status: TaskStatus.PENDING,
       priority: createTaskDto.priority || TaskPriority.MEDIUM,
-      dueDate: createTaskDto.dueDate
-        ? new Date(createTaskDto.dueDate)
-        : undefined,
+      dueDate: createTaskDto.dueDate ? new Date(createTaskDto.dueDate) : null,
       isCompleted: false,
       userId,
+      categoryId: createTaskDto.categoryId,
+      category: undefined,
+      notes: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -77,9 +98,6 @@ export class MockTasksService extends TasksService {
     return newTask;
   }
 
-  /**
-   * Mock implementation of findUserTasks
-   */
   async findUserTasks(
     userId: string,
     queryDto: TaskQueryDto,
@@ -99,6 +117,12 @@ export class MockTasksService extends TasksService {
       );
     }
 
+    if (queryDto.categoryId) {
+      filteredTasks = filteredTasks.filter(
+        (task) => task.categoryId === queryDto.categoryId,
+      );
+    }
+
     if (queryDto.search) {
       const searchLower = queryDto.search.toLowerCase();
       filteredTasks = filteredTasks.filter(
@@ -112,110 +136,224 @@ export class MockTasksService extends TasksService {
     // Apply pagination
     const page = queryDto.page || 1;
     const limit = queryDto.limit || 10;
+    const total = filteredTasks.length;
     const skip = (page - 1) * limit;
-    const paginatedTasks = filteredTasks.slice(skip, skip + limit);
+
+    const paginatedTasks = filteredTasks
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(skip, skip + limit);
 
     return {
       tasks: paginatedTasks,
-      total: filteredTasks.length,
+      total,
       page,
       limit,
-      totalPages: Math.ceil(filteredTasks.length / limit),
+      totalPages: Math.ceil(total / limit),
     };
   }
 
-  /**
-   * Mock implementation of findTaskById
-   */
   async findTaskById(id: string, userId: string): Promise<TaskResponse> {
-    const task = this.mockTasks.find(
-      (task) => task.id === id && task.userId === userId,
-    );
+    const task = this.mockTasks.find((t) => t.id === id && t.userId === userId);
 
     if (!task) {
-      throw new Error('Task not found');
+      throw new NotFoundException('Task not found');
     }
 
     return task;
   }
 
-  /**
-   * Mock implementation of updateTask
-   */
   async updateTask(
     id: string,
     updateTaskDto: UpdateTaskDto,
     userId: string,
   ): Promise<TaskResponse> {
     const taskIndex = this.mockTasks.findIndex(
-      (task) => task.id === id && task.userId === userId,
+      (t) => t.id === id && t.userId === userId,
     );
 
     if (taskIndex === -1) {
-      throw new Error('Task not found');
+      throw new NotFoundException('Task not found');
     }
 
-    const updatedTask = {
-      ...this.mockTasks[taskIndex],
+    const task = this.mockTasks[taskIndex];
+
+    // Update task
+    this.mockTasks[taskIndex] = {
+      ...task,
       ...updateTaskDto,
       dueDate: updateTaskDto.dueDate
         ? new Date(updateTaskDto.dueDate)
-        : this.mockTasks[taskIndex].dueDate,
+        : task.dueDate,
+      isCompleted:
+        updateTaskDto.status === TaskStatus.COMPLETED
+          ? true
+          : updateTaskDto.status === TaskStatus.PENDING ||
+              updateTaskDto.status === TaskStatus.IN_PROGRESS
+            ? false
+            : task.isCompleted,
       updatedAt: new Date(),
     };
 
-    // Auto-update completion status
-    if (updateTaskDto.status === TaskStatus.COMPLETED) {
-      updatedTask.isCompleted = true;
-    } else if (
-      updateTaskDto.status === TaskStatus.PENDING ||
-      updateTaskDto.status === TaskStatus.IN_PROGRESS
-    ) {
-      updatedTask.isCompleted = false;
-    }
-
-    this.mockTasks[taskIndex] = updatedTask;
-    return updatedTask;
+    return this.mockTasks[taskIndex];
   }
 
-  /**
-   * Mock implementation of deleteTask
-   */
   async deleteTask(id: string, userId: string): Promise<void> {
     const taskIndex = this.mockTasks.findIndex(
-      (task) => task.id === id && task.userId === userId,
+      (t) => t.id === id && t.userId === userId,
     );
 
     if (taskIndex === -1) {
-      throw new Error('Task not found');
+      throw new NotFoundException('Task not found');
     }
 
     this.mockTasks.splice(taskIndex, 1);
   }
 
-  /**
-   * Mock implementation of getTaskStats
-   */
   async getTaskStats(userId: string): Promise<TaskStatsResponse> {
     const userTasks = this.mockTasks.filter((task) => task.userId === userId);
+
+    const total = userTasks.length;
+    const pending = userTasks.filter(
+      (t) => t.status === TaskStatus.PENDING,
+    ).length;
+    const inProgress = userTasks.filter(
+      (t) => t.status === TaskStatus.IN_PROGRESS,
+    ).length;
+    const completed = userTasks.filter(
+      (t) => t.status === TaskStatus.COMPLETED,
+    ).length;
+
+    // Count overdue tasks
     const now = new Date();
+    const overdue = userTasks.filter(
+      (t) =>
+        t.dueDate &&
+        new Date(t.dueDate) < now &&
+        t.status !== TaskStatus.COMPLETED,
+    ).length;
 
     return {
-      total: userTasks.length,
-      pending: userTasks.filter((task) => task.status === TaskStatus.PENDING)
-        .length,
-      inProgress: userTasks.filter(
-        (task) => task.status === TaskStatus.IN_PROGRESS,
-      ).length,
-      completed: userTasks.filter(
-        (task) => task.status === TaskStatus.COMPLETED,
-      ).length,
-      overdue: userTasks.filter(
-        (task) =>
-          task.dueDate &&
-          task.dueDate < now &&
-          task.status !== TaskStatus.COMPLETED,
-      ).length,
+      total,
+      pending,
+      inProgress,
+      completed,
+      overdue,
     };
+  }
+
+  async bulkUpdateTasks(
+    bulkUpdateDto: BulkUpdateTasksDto,
+    userId: string,
+  ): Promise<{ updated: number; failed: string[] }> {
+    const { taskIds, ...updateData } = bulkUpdateDto;
+    const failed: string[] = [];
+    let updated = 0;
+
+    for (const taskId of taskIds) {
+      const taskIndex = this.mockTasks.findIndex(
+        (t) => t.id === taskId && t.userId === userId,
+      );
+
+      if (taskIndex === -1) {
+        failed.push(taskId);
+        continue;
+      }
+
+      const task = this.mockTasks[taskIndex];
+      this.mockTasks[taskIndex] = {
+        ...task,
+        ...updateData,
+        isCompleted:
+          updateData.status === TaskStatus.COMPLETED
+            ? true
+            : updateData.status === TaskStatus.PENDING ||
+                updateData.status === TaskStatus.IN_PROGRESS
+              ? false
+              : task.isCompleted,
+        updatedAt: new Date(),
+      };
+      updated++;
+    }
+
+    return { updated, failed };
+  }
+
+  async bulkDeleteTasks(
+    bulkDeleteDto: BulkDeleteTasksDto,
+    userId: string,
+  ): Promise<{ deleted: number; failed: string[] }> {
+    const { taskIds } = bulkDeleteDto;
+    const failed: string[] = [];
+    let deleted = 0;
+
+    for (const taskId of taskIds) {
+      const taskIndex = this.mockTasks.findIndex(
+        (t) => t.id === taskId && t.userId === userId,
+      );
+
+      if (taskIndex === -1) {
+        failed.push(taskId);
+        continue;
+      }
+
+      this.mockTasks.splice(taskIndex, 1);
+      deleted++;
+    }
+
+    return { deleted, failed };
+  }
+
+  async addTaskNote(
+    taskId: string,
+    addNoteDto: AddTaskNoteDto,
+    userId: string,
+  ): Promise<TaskResponse> {
+    const taskIndex = this.mockTasks.findIndex(
+      (t) => t.id === taskId && t.userId === userId,
+    );
+
+    if (taskIndex === -1) {
+      throw new NotFoundException('Task not found');
+    }
+
+    const task = this.mockTasks[taskIndex];
+    const newNote = {
+      id: `note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      content: addNoteDto.content,
+      createdAt: new Date(),
+    };
+
+    this.mockTasks[taskIndex] = {
+      ...task,
+      notes: [...task.notes, newNote],
+      updatedAt: new Date(),
+    };
+
+    return this.mockTasks[taskIndex];
+  }
+
+  async removeTaskNote(
+    taskId: string,
+    noteId: string,
+    userId: string,
+  ): Promise<TaskResponse> {
+    const taskIndex = this.mockTasks.findIndex(
+      (t) => t.id === taskId && t.userId === userId,
+    );
+
+    if (taskIndex === -1) {
+      throw new NotFoundException('Task not found');
+    }
+
+    const task = this.mockTasks[taskIndex];
+    const updatedNotes = task.notes.filter((note) => note.id !== noteId);
+
+    this.mockTasks[taskIndex] = {
+      ...task,
+      notes: updatedNotes,
+      updatedAt: new Date(),
+    };
+
+    return this.mockTasks[taskIndex];
   }
 }

@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { Category } from '../../categories/entities/category.entity';
 
 export enum TaskStatus {
   PENDING = 'pending',
@@ -52,12 +53,24 @@ export class Task {
   @Column({ default: false })
   isCompleted: boolean;
 
+  @Column({ type: 'json', nullable: true })
+  notes?: { id: string; content: string; createdAt: Date }[];
+
   @Column()
   userId: string;
+
+  @Column({ nullable: true })
+  categoryId?: string;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
+
+  @ManyToOne(() => Category, (category) => category.tasks, {
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'categoryId' })
+  category?: Category;
 
   @CreateDateColumn()
   createdAt: Date;

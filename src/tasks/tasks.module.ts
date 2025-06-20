@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { TasksController } from './controllers/tasks.controller';
 import { TasksService } from './services/tasks.service';
-import { MockTasksService } from './services/tasks.service.mock';
+import { TasksServiceMock } from './services/tasks.service.mock';
 import { Task } from './entities/task.entity';
 
 @Module({
@@ -19,7 +19,7 @@ import { Task } from './entities/task.entity';
       provide: TasksService,
       useFactory: (taskRepository?) => {
         if (process.env.SKIP_DB_CONNECTION === 'true') {
-          return new MockTasksService();
+          return new TasksServiceMock();
         }
 
         const service = new TasksService();

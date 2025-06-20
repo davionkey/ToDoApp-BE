@@ -3,11 +3,16 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { Repository, Like } from 'typeorm';
+import { Repository, Like, In } from 'typeorm';
 import { Task, TaskStatus } from '../entities/task.entity';
 import { CreateTaskDto } from '../dto/create-task.dto';
 import { UpdateTaskDto } from '../dto/update-task.dto';
 import { TaskQueryDto } from '../dto/task-query.dto';
+import {
+  BulkUpdateTasksDto,
+  BulkDeleteTasksDto,
+} from '../dto/bulk-update-tasks.dto';
+import { AddTaskNoteDto } from '../dto/task-notes.dto';
 import {
   TaskResponse,
   TaskListResponse,
@@ -75,11 +80,19 @@ export class TasksService {
       throw new Error('Database connection not available');
     }
 
-    const { status, priority, search, page = 1, limit = 10 } = queryDto;
+    const {
+      status,
+      priority,
+      search,
+      page = 1,
+      limit = 10,
+      categoryId,
+    } = queryDto;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.taskRepository
       .createQueryBuilder('task')
+      .leftJoinAndSelect('task.category', 'category')
       .where('task.userId = :userId', { userId });
 
     // Apply filters
@@ -89,6 +102,10 @@ export class TasksService {
 
     if (priority) {
       queryBuilder.andWhere('task.priority = :priority', { priority });
+    }
+
+    if (categoryId) {
+      queryBuilder.andWhere('task.categoryId = :categoryId', { categoryId });
     }
 
     if (search) {
@@ -122,6 +139,7 @@ export class TasksService {
 
     const task = await this.taskRepository.findOne({
       where: { id, userId },
+      relations: ['category'],
     });
 
     if (!task) {
@@ -238,6 +256,152 @@ export class TasksService {
   }
 
   /**
+   * Bulk update multiple tasks
+   */
+  async bulkUpdateTasks(
+    bulkUpdateDto: BulkUpdateTasksDto,
+    userId: string,
+  ): Promise<{ updated: number; failed: string[] }> {
+    if (!this.taskRepository) {
+      throw new Error('Database connection not available');
+    }
+
+    const { taskIds, ...updateData } = bulkUpdateDto;
+    const failed: string[] = [];
+    let updated = 0;
+
+    // Verify all tasks belong to the user
+    const tasks = await this.taskRepository.find({
+      where: { id: In(taskIds), userId },
+    });
+
+    const validTaskIds = tasks.map((task) => task.id);
+    const invalidTaskIds = taskIds.filter((id) => !validTaskIds.includes(id));
+    failed.push(...invalidTaskIds);
+
+    if (validTaskIds.length > 0) {
+      const updatePayload: any = { ...updateData };
+
+      // Auto-update completion status based on status
+      if (updateData.status === TaskStatus.COMPLETED) {
+        updatePayload.isCompleted = true;
+      } else if (
+        updateData.status === TaskStatus.PENDING ||
+        updateData.status === TaskStatus.IN_PROGRESS
+      ) {
+        updatePayload.isCompleted = false;
+      }
+
+      await this.taskRepository.update({ id: In(validTaskIds) }, updatePayload);
+      updated = validTaskIds.length;
+    }
+
+    return { updated, failed };
+  }
+
+  /**
+   * Bulk delete multiple tasks
+   */
+  async bulkDeleteTasks(
+    bulkDeleteDto: BulkDeleteTasksDto,
+    userId: string,
+  ): Promise<{ deleted: number; failed: string[] }> {
+    if (!this.taskRepository) {
+      throw new Error('Database connection not available');
+    }
+
+    const { taskIds } = bulkDeleteDto;
+    const failed: string[] = [];
+
+    // Verify all tasks belong to the user
+    const tasks = await this.taskRepository.find({
+      where: { id: In(taskIds), userId },
+    });
+
+    const validTaskIds = tasks.map((task) => task.id);
+    const invalidTaskIds = taskIds.filter((id) => !validTaskIds.includes(id));
+    failed.push(...invalidTaskIds);
+
+    let deleted = 0;
+    if (validTaskIds.length > 0) {
+      await this.taskRepository.delete({ id: In(validTaskIds) });
+      deleted = validTaskIds.length;
+    }
+
+    return { deleted, failed };
+  }
+
+  /**
+   * Add a note to a task
+   */
+  async addTaskNote(
+    taskId: string,
+    addNoteDto: AddTaskNoteDto,
+    userId: string,
+  ): Promise<TaskResponse> {
+    if (!this.taskRepository) {
+      throw new Error('Database connection not available');
+    }
+
+    const task = await this.taskRepository.findOne({
+      where: { id: taskId, userId },
+    });
+
+    if (!task) {
+      throw new NotFoundException('Task not found');
+    }
+
+    const newNote = {
+      id: `note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      content: addNoteDto.content,
+      createdAt: new Date(),
+    };
+
+    const updatedNotes = [...(task.notes || []), newNote];
+    await this.taskRepository.update(taskId, { notes: updatedNotes });
+
+    const updatedTask = await this.taskRepository.findOne({
+      where: { id: taskId },
+      relations: ['category'],
+    });
+
+    return this.transformTaskResponse(updatedTask!);
+  }
+
+  /**
+   * Remove a note from a task
+   */
+  async removeTaskNote(
+    taskId: string,
+    noteId: string,
+    userId: string,
+  ): Promise<TaskResponse> {
+    if (!this.taskRepository) {
+      throw new Error('Database connection not available');
+    }
+
+    const task = await this.taskRepository.findOne({
+      where: { id: taskId, userId },
+    });
+
+    if (!task) {
+      throw new NotFoundException('Task not found');
+    }
+
+    const updatedNotes = (task.notes || []).filter(
+      (note) => note.id !== noteId,
+    );
+    await this.taskRepository.update(taskId, { notes: updatedNotes });
+
+    const updatedTask = await this.taskRepository.findOne({
+      where: { id: taskId },
+      relations: ['category'],
+    });
+
+    return this.transformTaskResponse(updatedTask!);
+  }
+
+  /**
    * Transforms task entity to response format
    */
   private transformTaskResponse(task: Task): TaskResponse {
@@ -250,6 +414,9 @@ export class TasksService {
       dueDate: task.dueDate,
       isCompleted: task.isCompleted,
       userId: task.userId,
+      categoryId: task.categoryId,
+      category: task.category,
+      notes: task.notes || [],
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     };
